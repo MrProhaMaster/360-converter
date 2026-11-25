@@ -104,35 +104,38 @@ class App(tk.Tk):
 
         right = ttk.Frame(body)
         right.grid(row=0, column=1, sticky="nsew")
+        right.columnconfigure(0, weight=1)
+        right.rowconfigure(1, weight=1)
         preview_header = ttk.Frame(right)
-        preview_header.pack(fill="x", pady=(0, 8))
+        preview_header.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         ttk.Label(preview_header, text="02  ПРЕДПРОСМОТР", style="Muted.TLabel").pack(side="left")
         ttk.Combobox(preview_header, textvariable=self.face, width=13, state="readonly",
                      values=["Основной", "Справа", "Сзади", "Слева", "Сверху", "Снизу"]).pack(side="right")
         self.canvas = tk.Canvas(right, bg="#070d18", highlightthickness=1, highlightbackground="#334155", height=280)
-        self.canvas.pack(fill="both", expand=True)
+        self.canvas.grid(row=1, column=0, sticky="nsew")
         self.canvas.bind("<Configure>", lambda e: self.draw_preview())
         self.canvas.bind("<ButtonPress-1>", self.drag_start)
         self.canvas.bind("<B1-Motion>", self.drag_move)
         self.preview_image = None
         self.canvas.create_text(300, 120, text="Откройте панораму, чтобы выбрать ракурс", fill=MUTED)
-        ttk.Label(right, textvariable=self.meta, style="Muted.TLabel").pack(anchor="w", pady=6)
+        ttk.Label(right, textvariable=self.meta, style="Muted.TLabel").grid(row=2, column=0, sticky="w", pady=6)
 
         controls = ttk.LabelFrame(right, text="Ракурс • градусы   |   Перетаскивайте изображение для поворота", padding=10)
-        controls.pack(fill="x")
+        controls.grid(row=3, column=0, sticky="ew")
         labels = {"yaw": "Поворот / yaw", "pitch": "Наклон / pitch", "roll": "Крен / roll", "fov": "Угол обзора / FOV"}
         for col, (key, label) in enumerate(labels.items()):
             controls.columnconfigure(col, weight=1)
             ttk.Label(controls, text=label).grid(row=0, column=col, sticky="w", padx=5)
             ttk.Entry(controls, textvariable=self.vars[key], width=12).grid(row=1, column=col, sticky="ew", padx=5, pady=5)
         presetbar = ttk.Frame(right)
-        presetbar.pack(fill="x", pady=8)
+        presetbar.grid(row=4, column=0, sticky="ew", pady=8)
         for text, command in [("Сбросить", self.reset), ("Открыть пресет…", self.open_preset),
                               ("Сохранить пресет…", self.write_preset), ("Закрепить за фото", self.pin_settings)]:
             ttk.Button(presetbar, text=text, command=command).pack(side="left", padx=(0, 5))
 
         export = ttk.LabelFrame(right, text="03  ЭКСПОРТ", padding=10)
-        export.pack(fill="x")
+        self.export_frame = export
+        export.grid(row=5, column=0, sticky="ew")
         for col, (key, label) in enumerate((("views", "Видов"), ("width", "Ширина"), ("height", "Высота"), ("quality", "Качество JPEG"))):
             ttk.Label(export, text=label).grid(row=0, column=col, sticky="w", padx=5)
             widget = ttk.Combobox(export, textvariable=self.vars[key], values=[1, 4, 6], state="readonly", width=9) if key == "views" else ttk.Entry(export, textvariable=self.vars[key], width=12)

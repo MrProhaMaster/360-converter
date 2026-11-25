@@ -31,6 +31,14 @@ def test_gui_preview_export_and_close(tmp_path, panorama, ffmpeg):
         pytest.skip(f"No Tk display: {exc}")
     app.withdraw()
     try:
+        app.geometry("1000x720")
+        app.deiconify()
+        app.update()
+        export_bottom = app.export_frame.winfo_rooty() + app.export_frame.winfo_height()
+        footer_top = app.progressbar.master.winfo_rooty()
+        assert export_bottom <= footer_top
+        assert app.canvas.winfo_height() >= 20
+        app.withdraw()
         app.ffmpeg.set(ffmpeg)
         app.add_paths([panorama[0]])
         wait_ui(app, lambda: app.preview_image is not None)
