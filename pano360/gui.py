@@ -1,18 +1,20 @@
 """Tk UI: all widget access stays on the main thread; workers send queue events."""
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, replace
-import io
 import os
 from pathlib import Path
 import queue
 import threading
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from PIL import Image, ImageCms, ImageTk
+from PIL import Image, ImageTk
 
+from . import __version__
 from .core import (Settings, ConversionError, Cancelled, batch_export, check_ffmpeg,
-                   find_ffmpeg, inspect_source, load_preset, render, save_preset)
+                   find_ffmpeg, load_preset, save_preset)
+from .preview import PreviewRenderer
 
 BG, PANEL, TEXT, MUTED, ACCENT = "#0f172a", "#192134", "#f1f5f9", "#b8c4d7", "#7c3aed"
 
@@ -20,7 +22,7 @@ BG, PANEL, TEXT, MUTED, ACCENT = "#0f172a", "#192134", "#f1f5f9", "#b8c4d7", "#7
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Pano360 1.1 • Панорама в кадр")
+        self.title(f"Pano360 {__version__} • Панорама в кадр")
         self.geometry("1240x850")
         self.minsize(1000, 720)
         self.configure(bg=BG)
@@ -34,6 +36,13 @@ class App(tk.Tk):
         self.preview_cancel = threading.Event()
         self.export_cancel = threading.Event()
         self.generation = 0
+        self.preview_context = 0
+        self.preview_busy = False
+        self.preview_dirty = False
+        self.preview_renderer = PreviewRenderer()
+        self.dragging = False
+        self.drag_origin = None
+        self.interactive_pixels = 320 * 240
         self.preview_future = None
         self.export_future = None
         self.timer = None
@@ -51,10 +60,9 @@ class App(tk.Tk):
         for variable in self.vars.values():
             variable.trace_add("write", self.schedule_preview)
         self.face.trace_add("write", self.schedule_preview)
-        self.ffmpeg.trace_add("write", self.schedule_preview)
         self.bind("<Control-o>", lambda e: self.add_files())
         self.protocol("WM_DELETE_WINDOW", self.close)
-        self.after(80, self.poll)
+        self.after(16, self.poll)
         try:
             self.ffmpeg.set(find_ffmpeg())
         except ConversionError:
@@ -116,8 +124,12 @@ class App(tk.Tk):
         self.canvas.bind("<Configure>", lambda e: self.draw_preview())
         self.canvas.bind("<ButtonPress-1>", self.drag_start)
         self.canvas.bind("<B1-Motion>", self.drag_move)
+        self.canvas.bind("<ButtonRelease-1>", self.drag_end)
         self.preview_image = None
-        self.canvas.create_text(300, 120, text="Откройте панораму, чтобы выбрать ракурс", fill=MUTED)
+        self.preview_item = self.canvas.create_image(0, 0, anchor="center")
+        self.preview_placeholder = self.canvas.create_text(300, 120, text="Откройте панораму, чтобы выбрать ракурс", fill=MUTED,
+                                                         justify="center", font=("Segoe UI", 13))
+        self.crosshair = [self.canvas.create_line(0, 0, 0, 0, fill="white", state="hidden") for _ in range(2)]
         ttk.Label(right, textvariable=self.meta, style="Muted.TLabel").grid(row=2, column=0, sticky="w", pady=6)
 
         controls = ttk.LabelFrame(right, text="Ракурс • градусы   |   Перетаскивайте изображение для поворота", padding=10)
@@ -213,10 +225,15 @@ class App(tk.Tk):
             self.select_file()
 
     def select_file(self, event=None):
+        self.preview_context += 1
+        self.dragging = False
+        self.drag_origin = None
         path = self.current_path()
         if path in self.per_file:
             self.apply_settings(self.per_file[path])
-        self.preview_image = None
+        if self.preview_image:
+            self.preview_image.close()
+            self.preview_image = None
         self.draw_preview()
         self.schedule_preview()
 
@@ -268,80 +285,101 @@ class App(tk.Tk):
         if self.suspend or self.closing:
             return
         self.generation += 1
-        self.preview_cancel.set()
-        if self.preview_future:
-            self.preview_future.cancel()
-        if self.timer:
-            self.after_cancel(self.timer)
-        self.timer = self.after(280, self.start_preview)
+        self.preview_dirty = True
+        # Throttle rather than debounce: continuous mouse motion must still produce frames.
+        # Only one worker may run; its completion will pick up the newest parameters.
+        if self.timer is None and not self.preview_busy:
+            self.timer = self.after(16, self.start_preview)
 
     def start_preview(self):
+        if self.timer is not None:
+            self.after_cancel(self.timer)
         self.timer = None
+        if self.closing or self.preview_busy:
+            return
+        self.preview_dirty = False
         path = self.current_path()
         if not path:
             return
         try:
             settings = self.settings()
-            ffmpeg = find_ffmpeg(self.ffmpeg.get())
         except ConversionError as exc:
             self.status.set(str(exc))
             return
-        # Preserve aspect ratio while limiting preview cost. Export uses full resolution.
+        # Smaller interactive frames, refined on release. Export dimensions stay untouched.
         height = settings.width if settings.views == 6 else settings.height
-        scale = min(1, 720 / settings.width, 460 / height)
-        settings = replace(settings, width=max(64, round(settings.width * scale)), height=max(64, round(height * scale)))
+        max_width, max_height = (480, 320) if self.dragging else (720, 460)
+        scale = min(1, max_width / settings.width, max_height / height)
+        if self.dragging:
+            scale = min(scale, (self.interactive_pixels / (settings.width * height)) ** 0.5)
+        size = (max(1, round(settings.width * scale)), max(1, round(height * scale)))
         face_index = ["Основной", "Справа", "Сзади", "Слева", "Сверху", "Снизу"].index(self.face.get())
         yaw, pitch = [(0, 0), (90, 0), (180, 0), (-90, 0), (0, 90), (0, -90)][face_index]
         if settings.views == 1:
             yaw, pitch = 0, 0
         elif settings.views == 4 and face_index > 3:
             yaw, pitch = 0, 0
-        self.preview_cancel = threading.Event()
-        token, cancel = self.generation, self.preview_cancel
-        self.meta.set("Рассчитываю предпросмотр…")
+        token, context, cancel = self.generation, self.preview_context, self.preview_cancel
+        self.preview_busy = True
+        if self.preview_image is None:
+            self.meta.set("Загружаю панораму для предпросмотра…")
 
         def worker():
             try:
-                info = inspect_source(path)
-                im = render(path, settings, ffmpeg, cancel, yaw, pitch)
-                note = ""
-                if info.icc:
-                    try:
-                        im = ImageCms.profileToProfile(im, ImageCms.ImageCmsProfile(io.BytesIO(info.icc)), ImageCms.createProfile("sRGB"), outputMode="RGB")
-                    except Exception:
-                        note = " • профиль не удалось применить к предпросмотру"
-                self.events.put(("preview", token, im, f"{path.name}  •  {info.width} × {info.height}  •  ICC: {len(info.icc or b'')} байт" + note))
+                started = time.perf_counter()
+                im, description = self.preview_renderer.render(path, settings, size, yaw, pitch, cancel)
+                self.events.put(("preview", token, context, im, description, time.perf_counter() - started))
             except Cancelled:
-                pass
+                self.events.put(("preview_cancelled", token, context))
             except Exception as exc:
-                self.events.put(("preview_error", token, str(exc)))
+                self.events.put(("preview_error", token, context, str(exc)))
         self.preview_future = self.preview_pool.submit(worker)
 
     def draw_preview(self):
-        self.canvas.delete("all")
         w, h = max(1, self.canvas.winfo_width()), max(1, self.canvas.winfo_height())
         if self.preview_image:
-            im = self.preview_image.copy()
-            im.thumbnail((w, h), Image.Resampling.LANCZOS)
-            self.tk_preview = ImageTk.PhotoImage(im)
-            self.canvas.create_image(w / 2, h / 2, image=self.tk_preview)
-            self.canvas.create_line(w / 2-10, h / 2, w / 2+10, h / 2, fill="white")
-            self.canvas.create_line(w / 2, h / 2-10, w / 2, h / 2+10, fill="white")
+            # Keep the displayed rectangle fixed as interactive resolution changes.
+            scale = min(w / self.preview_image.width, h / self.preview_image.height)
+            size = (max(1, round(self.preview_image.width * scale)), max(1, round(self.preview_image.height * scale)))
+            with self.preview_image.resize(size, Image.Resampling.BILINEAR if self.dragging else Image.Resampling.LANCZOS) as im:
+                self.tk_preview = ImageTk.PhotoImage(im)
+            self.canvas.itemconfigure(self.preview_item, image=self.tk_preview, state="normal")
+            self.canvas.coords(self.preview_item, w / 2, h / 2)
+            self.canvas.itemconfigure(self.preview_placeholder, state="hidden")
+            self.canvas.coords(self.crosshair[0], w / 2-10, h / 2, w / 2+10, h / 2)
+            self.canvas.coords(self.crosshair[1], w / 2, h / 2-10, w / 2, h / 2+10)
+            for item in self.crosshair:
+                self.canvas.itemconfigure(item, state="normal")
         else:
-            self.canvas.create_text(w / 2, h / 2, text="Добавьте панораму JPEG 2:1\nи выберите FFmpeg", justify="center", fill=MUTED, font=("Segoe UI", 13))
+            self.canvas.itemconfigure(self.preview_item, state="hidden")
+            for item in self.crosshair:
+                self.canvas.itemconfigure(item, state="hidden")
+            self.canvas.coords(self.preview_placeholder, w / 2, h / 2)
+            self.canvas.itemconfigure(self.preview_placeholder, text="Добавьте панораму JPEG 2:1", state="normal")
 
     def drag_start(self, event):
         try:
             s = self.settings()
             self.drag_origin = (event.x, event.y, s.yaw, s.pitch)
+            self.dragging = True
         except ConversionError:
             self.drag_origin = None
 
     def drag_move(self, event):
         if getattr(self, "drag_origin", None):
             x, y, yaw, pitch = self.drag_origin
+            self.suspend = True
             self.vars["yaw"].set(str(round((yaw - (event.x-x)*0.25 + 180) % 360 - 180, 1)))
             self.vars["pitch"].set(str(round(max(-90, min(90, pitch + (event.y-y)*0.25)), 1)))
+            self.suspend = False
+            self.schedule_preview()
+
+    def drag_end(self, event):
+        if self.drag_origin is not None:
+            self.drag_move(event)
+            self.dragging = False
+            self.drag_origin = None
+            self.schedule_preview()
 
     def quick_export(self):
         """Export four sides of every loaded panorama without changing saved settings."""
@@ -395,16 +433,33 @@ class App(tk.Tk):
             while True:
                 event = self.events.get_nowait()
                 kind = event[0]
-                if kind == "preview" and event[1] == self.generation:
-                    self.preview_image = event[2]
-                    self.meta.set(event[3])
-                    self.draw_preview()
-                    if not self.export_future or self.export_future.done():
-                        self.status.set("Предпросмотр готов. Выберите папку и запустите экспорт.")
-                elif kind == "preview_error" and event[1] == self.generation:
-                    self.preview_image = None
-                    self.draw_preview()
-                    self.meta.set(event[2][:160])
+                if kind in ("preview", "preview_error", "preview_cancelled"):
+                    self.preview_busy = False
+                    current = not self.closing and event[2] == self.preview_context
+                    if kind == "preview":
+                        # Display completed intermediate frames during a drag; do not starve
+                        # the viewer by discarding every frame while the mouse keeps moving.
+                        if current and (event[1] == self.generation or self.dragging):
+                            if self.dragging and (event[5] > 0.022 or event[5] < 0.010):
+                                self.interactive_pixels = max(160 * 120, min(480 * 320,
+                                    self.interactive_pixels * 0.016 / max(0.001, event[5])))
+                            if self.preview_image:
+                                self.preview_image.close()
+                            self.preview_image = event[3]
+                            self.meta.set(event[4])
+                            self.draw_preview()
+                            if not self.dragging and (not self.export_future or self.export_future.done()):
+                                self.status.set("Предпросмотр готов. Выберите папку и запустите экспорт.")
+                        else:
+                            event[3].close()
+                    elif kind == "preview_error" and current and event[1] == self.generation:
+                        if self.preview_image:
+                            self.preview_image.close()
+                            self.preview_image = None
+                        self.draw_preview()
+                        self.meta.set(event[3][:160])
+                    if self.preview_dirty and not self.closing:
+                        self.start_preview()
                 elif kind == "progress":
                     self.progressbar["value"] = event[1] / event[2] * 100
                     self.status.set(f"{event[1]} / {event[2]}  •  {event[3]}")
@@ -430,7 +485,7 @@ class App(tk.Tk):
             self.export_pool.shutdown(wait=False, cancel_futures=True)
             self.destroy()
         else:
-            self.after(80, self.poll)
+            self.after(8 if self.preview_busy or self.dragging else 32, self.poll)
 
     def open_result(self):
         if self.last_report and os.name == "nt":

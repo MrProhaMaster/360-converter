@@ -1,4 +1,6 @@
 import time
+import threading
+from types import SimpleNamespace
 from dataclasses import asdict
 from pathlib import Path
 import pytest
@@ -189,3 +191,75 @@ def test_quick_export_recovers_controls(gui_app, tmp_path, panorama, ffmpeg, mon
         assert not errors
     else:
         assert errors and "Test export failure" in app.status.get()
+
+
+def test_drag_updates_before_release_and_keeps_latest_frame(gui_app, panorama, monkeypatch):
+    app = gui_app
+    app.ffmpeg.set("missing-ffmpeg.exe")  # Interactive preview does not require a subprocess.
+    app.add_paths([panorama[0]])
+    wait_ui(app, lambda: app.preview_image is not None)
+    initial_frame = app.preview_image
+    actual_render = app.preview_renderer.render
+    requests = []
+
+    def slow_render(path, settings, size, *args):
+        requests.append((settings, size))
+        time.sleep(0.04)  # Mouse events arrive faster than the renderer can finish.
+        return actual_render(path, settings, size, *args)
+
+    monkeypatch.setattr(app.preview_renderer, "render", slow_render)
+    app.drag_start(SimpleNamespace(x=100, y=100))
+    frames = []
+    for step in range(60):
+        app.drag_move(SimpleNamespace(x=100 + step * 2, y=100 + step))
+        app.update()
+        if app.preview_image is not initial_frame and (not frames or app.preview_image is not frames[-1]):
+            frames.append(app.preview_image)
+        time.sleep(0.015)
+    # The former 280ms debounce would show no new frames throughout this gesture.
+    assert app.dragging and len(frames) >= 2
+    assert len(requests) < 60  # No backlog of one render per mouse event.
+    app.drag_end(SimpleNamespace(x=230, y=165))
+    wait_ui(app, lambda: not app.preview_busy and not app.preview_dirty and app.timer is None)
+    assert not app.dragging
+    assert requests[-1][0] == app.settings()
+    assert requests[-1][1] == (613, 460)
+    assert app.preview_image.size == (613, 460)
+    assert float(app.vars["yaw"].get()) == -32.5
+    assert float(app.vars["pitch"].get()) == 16.2
+
+
+def test_switch_photo_discards_inflight_frame(gui_app, tmp_path, panorama, monkeypatch):
+    app = gui_app
+    blue = tmp_path / "blue.jpg"
+    Image.new("RGB", (400, 200), "blue").save(blue)
+    started, release = threading.Event(), threading.Event()
+    actual_render = app.preview_renderer.render
+    shown = []
+    draw = app.draw_preview
+
+    def delayed(path, *args):
+        if path == panorama[0]:
+            started.set()
+            assert release.wait(5)
+        return actual_render(path, *args)
+
+    def record_frame():
+        if app.preview_image:
+            shown.append(app.meta.get())
+        draw()
+
+    monkeypatch.setattr(app.preview_renderer, "render", delayed)
+    monkeypatch.setattr(app, "draw_preview", record_frame)
+    app.add_paths([panorama[0], blue])
+    try:
+        wait_ui(app, started.is_set)
+        app.filelist.selection_clear(0, "end")
+        app.filelist.selection_set(1)
+        app.select_file()
+        release.set()
+        wait_ui(app, lambda: app.preview_image is not None)
+        assert shown and all("blue.jpg" in description for description in shown)
+        assert app.preview_image.getpixel((0, 0))[2] > 240
+    finally:
+        release.set()

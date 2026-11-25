@@ -2,6 +2,7 @@
 
 - Python и Tk: https://www.python.org/psf/license/ — используются в Windows-пакете PyInstaller.
 - Pillow: https://github.com/python-pillow/Pillow/blob/main/LICENSE — обработка JPEG/ICC и экранный предпросмотр.
+- NumPy: https://numpy.org/doc/stable/license.html — быстрый расчёт сферического предпросмотра. Лицензия NumPy и сведения о включённых в wheel библиотеках находятся в `_internal/numpy-*.dist-info/` переносимой сборки.
 - PyInstaller: https://pyinstaller.org/en/stable/license.html — сборка распространяемого приложения.
 - FFmpeg: https://ffmpeg.org/legal.html — отдельная внешняя программа. Лицензия конкретной сборки зависит от опций LGPL/GPL. Бинарник FFmpeg в исходный репозиторий и переносимую сборку не включён.
 - imageio-ffmpeg: https://github.com/imageio/imageio-ffmpeg — только среда разработчика/тесты; содержит платформенный FFmpeg. Не включается в приложение.

@@ -3,6 +3,7 @@ altgraph==0.17.5
 colorama==0.4.6
 imageio-ffmpeg==0.8.1
 iniconfig==2.3.1
+numpy==2.3.5
 packaging==26.4
 pefile==2024.8.26
 pillow==13.0.0
