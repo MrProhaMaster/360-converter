@@ -377,6 +377,8 @@ class App(tk.Tk):
                     self.preview_image = event[2]
                     self.meta.set(event[3])
                     self.draw_preview()
+                    if not self.export_future or self.export_future.done():
+                        self.status.set("Предпросмотр готов. Выберите папку и запустите экспорт.")
                 elif kind == "preview_error" and event[1] == self.generation:
                     self.preview_image = None
                     self.draw_preview()
