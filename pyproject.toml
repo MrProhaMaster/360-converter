@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pano360-converter"
+version = "1.0.0"
+description = "Offline Windows equirectangular panorama to JPEG converter"
+requires-python = ">=3.11"
+dependencies = ["Pillow>=11.3,<14"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "pyinstaller>=6.16,<7", "imageio-ffmpeg>=0.6,<0.9"]
+
+[project.gui-scripts]
+pano360 = "pano360.gui:main"
+
+[project.scripts]
+pano360-cli = "pano360.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["pano360*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
