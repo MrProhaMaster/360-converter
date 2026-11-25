@@ -20,7 +20,7 @@ BG, PANEL, TEXT, MUTED, ACCENT = "#0f172a", "#192134", "#f1f5f9", "#b8c4d7", "#7
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Pano360 • Панорама в кадр")
+        self.title("Pano360 1.1 • Панорама в кадр")
         self.geometry("1240x850")
         self.minsize(1000, 720)
         self.configure(bg=BG)
@@ -154,9 +154,11 @@ class App(tk.Tk):
         ttk.Button(footer, text="Выбрать…", command=self.choose_output).grid(row=1, column=2, padx=(8, 0))
         buttons = ttk.Frame(footer)
         buttons.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(10, 8))
-        self.export_button = ttk.Button(buttons, text="Экспортировать все панорамы", style="Accent.TButton", command=self.start_export)
+        self.quick_export_button = ttk.Button(buttons, text="Вырезать 4 направления", style="Accent.TButton", command=self.quick_export)
+        self.quick_export_button.pack(side="left", padx=(0, 8))
+        self.export_button = ttk.Button(buttons, text="Экспорт по настройкам", command=self.start_export)
         self.export_button.pack(side="left")
-        self.cancel_button = ttk.Button(buttons, text="Отменить", state="disabled", command=self.export_cancel.set)
+        self.cancel_button = ttk.Button(buttons, text="Отменить", state="disabled", command=lambda: self.export_cancel.set())
         self.cancel_button.pack(side="left", padx=8)
         self.result_button = ttk.Button(buttons, text="Открыть результат", state="disabled", command=self.open_result)
         self.result_button.pack(side="right")
@@ -341,7 +343,21 @@ class App(tk.Tk):
             self.vars["yaw"].set(str(round((yaw - (event.x-x)*0.25 + 180) % 360 - 180, 1)))
             self.vars["pitch"].set(str(round(max(-90, min(90, pitch + (event.y-y)*0.25)), 1)))
 
-    def start_export(self):
+    def quick_export(self):
+        """Export four sides of every loaded panorama without changing saved settings."""
+        if self.export_future and not self.export_future.done():
+            return
+        if not self.paths:
+            self.add_files()
+        if not self.paths:
+            return
+        if not self.output.get().strip():
+            self.choose_output()
+        if not self.output.get().strip():
+            return
+        self.start_export(views=4)
+
+    def start_export(self, *, views=None):
         if self.export_future and not self.export_future.done():
             return
         try:
@@ -350,14 +366,20 @@ class App(tk.Tk):
             if not self.paths or not self.output.get().strip():
                 raise ConversionError("Добавьте фотографии и выберите папку экспорта.")
             paths, output, per_file = list(self.paths), Path(self.output.get()), dict(self.per_file)
+            if views is not None:
+                settings = replace(settings, views=views).validate()
+                per_file = {path: replace(options, views=views).validate()
+                            for path, options in per_file.items()}
         except ConversionError as exc:
             messagebox.showerror("Экспорт", str(exc))
             return
         self.export_cancel = threading.Event()
         self.export_button.configure(state="disabled")
+        self.quick_export_button.configure(state="disabled")
         self.cancel_button.configure(state="normal")
         self.progressbar["value"] = 0
-        self.status.set("Экспорт начат. Настройки этого запуска зафиксированы.")
+        self.status.set(f"Вырезаю по 4 направления из {len(paths)} панорам: вперёд, вправо, назад, влево."
+                        if views == 4 else "Экспорт начат. Настройки этого запуска зафиксированы.")
         def worker():
             try:
                 check_ffmpeg(ffmpeg)
@@ -388,6 +410,7 @@ class App(tk.Tk):
                     self.status.set(f"{event[1]} / {event[2]}  •  {event[3]}")
                 elif kind in ("done", "export_error"):
                     self.export_button.configure(state="normal")
+                    self.quick_export_button.configure(state="normal")
                     self.cancel_button.configure(state="disabled")
                     if kind == "done":
                         self.last_report = event[1]
