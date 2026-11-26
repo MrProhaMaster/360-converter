@@ -76,14 +76,15 @@ CLI: код возврата 0 — успех, 1 — ошибки отдельн
 ## Тесты и сборка EXE
 
 ```powershell
-.venv\Scripts\python -m pip install -e ".[dev]"
+.venv\Scripts\python -m pip install -r requirements-dev.lock.txt
+.venv\Scripts\python -m pip install --no-deps -e .
 .venv\Scripts\python -m pytest -q
 pwsh -File scripts\build_windows.ps1 -Python .venv\Scripts\python.exe
 ```
 
 Результат: `dist/Pano360/Pano360.exe`, `bin/ffmpeg.exe`, `_internal/` и документация. Сборка выполняется в Windows x64; кросс-сборка Windows EXE из Linux не предусмотрена. `scripts/bundle_ffmpeg.py` берёт FFmpeg 9.0.2 из закреплённого wheel `imageio-ffmpeg==0.8.1`, сверяет SHA-256 и наличие `v360`, затем копирует бинарник без изменений и лицензионные сведения. Переменные `IMAGEIO_FFMPEG_EXE` и PATH не влияют на выбор включаемого файла. При несовпадении версии или контрольной суммы сборка завершается ошибкой.
 
-В конце сборки `scripts/check_windows_bundle.py` запускает **готовый EXE** с PATH только из Windows System32, из другой папки с кириллицей и пробелами. Проверяются экспорт 1/4/6 видов, размеры, ICC, отсутствие EXIF и сохранность источника. Это также обязательный шаг GitHub Actions перед публикацией артефакта. Для обычных интеграционных тестов можно задать `PANO360_TEST_FFMPEG`. Автоматического Release нет.
+В конце сборки `scripts/check_windows_bundle.py` запускает **готовый EXE** с PATH только из Windows System32, из другой папки с кириллицей и пробелами. Проверяются экспорт 1/4/6 видов, размеры, ICC, отсутствие EXIF и сохранность источника. Это также обязательный шаг GitHub Actions перед публикацией артефакта. CI использует Python 3.14.0 и `requirements-dev.lock.txt`, чтобы состав сборки совпадал с проверенной локальной средой. Для обычных интеграционных тестов можно задать `PANO360_TEST_FFMPEG`. Автоматического Release нет.
 
 ## Происхождение и ограничения
 
