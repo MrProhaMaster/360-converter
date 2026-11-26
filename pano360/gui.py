@@ -14,7 +14,8 @@ from PIL import Image, ImageTk
 from . import __version__
 from .core import (Settings, ConversionError, Cancelled, batch_export, check_ffmpeg,
                    find_ffmpeg, load_preset, save_preset)
-from .preview import PreviewRenderer
+from .preview import PreviewRenderer, rotation
+from .gizmo import RotationGizmo, to_angles
 
 BG, PANEL, TEXT, MUTED, ACCENT = "#0f172a", "#192134", "#f1f5f9", "#b8c4d7", "#7c3aed"
 
@@ -121,7 +122,7 @@ class App(tk.Tk):
                      values=["Основной", "Справа", "Сзади", "Слева", "Сверху", "Снизу"]).pack(side="right")
         self.canvas = tk.Canvas(right, bg="#070d18", highlightthickness=1, highlightbackground="#334155", height=280)
         self.canvas.grid(row=1, column=0, sticky="nsew")
-        self.canvas.bind("<Configure>", lambda e: self.draw_preview())
+        self.canvas.bind("<Configure>", self.resize_preview)
         self.canvas.bind("<ButtonPress-1>", self.drag_start)
         self.canvas.bind("<B1-Motion>", self.drag_move)
         self.canvas.bind("<ButtonRelease-1>", self.drag_end)
@@ -130,15 +131,17 @@ class App(tk.Tk):
         self.preview_placeholder = self.canvas.create_text(300, 120, text="Откройте панораму, чтобы выбрать ракурс", fill=MUTED,
                                                          justify="center", font=("Segoe UI", 13))
         self.crosshair = [self.canvas.create_line(0, 0, 0, 0, fill="white", state="hidden") for _ in range(2)]
+        self.gizmo = RotationGizmo(self.canvas, self.rotate_from_gizmo)
+        self.gizmo.place(relx=1, x=-8, y=8, anchor="ne", width=174, height=174)
         ttk.Label(right, textvariable=self.meta, style="Muted.TLabel").grid(row=2, column=0, sticky="w", pady=6)
 
-        controls = ttk.LabelFrame(right, text="Ракурс • градусы   |   Перетаскивайте изображение для поворота", padding=10)
+        controls = ttk.Frame(right)
         controls.grid(row=3, column=0, sticky="ew")
-        labels = {"yaw": "Поворот / yaw", "pitch": "Наклон / pitch", "roll": "Крен / roll", "fov": "Угол обзора / FOV"}
-        for col, (key, label) in enumerate(labels.items()):
-            controls.columnconfigure(col, weight=1)
-            ttk.Label(controls, text=label).grid(row=0, column=col, sticky="w", padx=5)
-            ttk.Entry(controls, textvariable=self.vars[key], width=12).grid(row=1, column=col, sticky="ew", padx=5, pady=5)
+        ttk.Label(controls, text="Угол обзора / FOV").pack(side="left", padx=(0, 8))
+        ttk.Entry(controls, textvariable=self.vars["fov"], width=7).pack(side="left")
+        ttk.Label(controls, text="Шар: свободно · X/Y/Z: ось · Shift: точнее", style="Muted.TLabel").pack(side="left", padx=12)
+        ttk.Button(controls, text="−", width=3, command=lambda: self.gizmo.step(-2)).pack(side="right")
+        ttk.Button(controls, text="+", width=3, command=lambda: self.gizmo.step(2)).pack(side="right", padx=4)
         presetbar = ttk.Frame(right)
         presetbar.grid(row=4, column=0, sticky="ew", pady=8)
         for text, command in [("Сбросить", self.reset), ("Открыть пресет…", self.open_preset),
@@ -228,6 +231,7 @@ class App(tk.Tk):
         self.preview_context += 1
         self.dragging = False
         self.drag_origin = None
+        self.gizmo.gesture = None
         path = self.current_path()
         if path in self.per_file:
             self.apply_settings(self.per_file[path])
@@ -284,6 +288,14 @@ class App(tk.Tk):
     def schedule_preview(self, *args):
         if self.suspend or self.closing:
             return
+        try:
+            s = self.settings()
+            yaw, pitch = self.preview_face(s)
+            self.gizmo.matrix = rotation(s.yaw, s.pitch, s.roll).astype(float) @ rotation(yaw, pitch, 0)
+            if self.gizmo.gesture is None:
+                self.gizmo.redraw()
+        except ConversionError:
+            pass
         self.generation += 1
         self.preview_dirty = True
         # Throttle rather than debounce: continuous mouse motion must still produce frames.
@@ -313,12 +325,7 @@ class App(tk.Tk):
         if self.dragging:
             scale = min(scale, (self.interactive_pixels / (settings.width * height)) ** 0.5)
         size = (max(1, round(settings.width * scale)), max(1, round(height * scale)))
-        face_index = ["Основной", "Справа", "Сзади", "Слева", "Сверху", "Снизу"].index(self.face.get())
-        yaw, pitch = [(0, 0), (90, 0), (180, 0), (-90, 0), (0, 90), (0, -90)][face_index]
-        if settings.views == 1:
-            yaw, pitch = 0, 0
-        elif settings.views == 4 and face_index > 3:
-            yaw, pitch = 0, 0
+        yaw, pitch = self.preview_face(settings)
         token, context, cancel = self.generation, self.preview_context, self.preview_cancel
         self.preview_busy = True
         if self.preview_image is None:
@@ -334,6 +341,32 @@ class App(tk.Tk):
             except Exception as exc:
                 self.events.put(("preview_error", token, context, str(exc)))
         self.preview_future = self.preview_pool.submit(worker)
+
+    def preview_face(self, settings):
+        index = ["Основной", "Справа", "Сзади", "Слева", "Сверху", "Снизу"].index(self.face.get())
+        if settings.views == 1 or (settings.views == 4 and index > 3):
+            return 0, 0
+        return [(0, 0), (90, 0), (180, 0), (-90, 0), (0, 90), (0, -90)][index]
+
+    def rotate_from_gizmo(self, matrix, moving):
+        try:
+            yaw, pitch = self.preview_face(self.settings())
+        except ConversionError as exc:
+            self.status.set(str(exc))
+            self.dragging = False
+            return
+        angles = to_angles(matrix @ rotation(yaw, pitch, 0).T)
+        self.suspend = True
+        for key, value in zip(("yaw", "pitch", "roll"), angles):
+            self.vars[key].set(str(value))
+        self.suspend = False
+        self.dragging = moving
+        self.schedule_preview()
+
+    def resize_preview(self, event=None):
+        size = min(174, max(100, self.canvas.winfo_height() - 16))
+        self.gizmo.place_configure(width=size, height=size)
+        self.draw_preview()
 
     def draw_preview(self):
         w, h = max(1, self.canvas.winfo_width()), max(1, self.canvas.winfo_height())

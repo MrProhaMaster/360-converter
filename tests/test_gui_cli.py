@@ -1,4 +1,5 @@
 import time
+import gc
 import threading
 from types import SimpleNamespace
 from dataclasses import asdict
@@ -43,6 +44,7 @@ def test_gui_preview_export_and_close(tmp_path, panorama, ffmpeg):
         footer_top = app.progressbar.master.winfo_rooty()
         assert export_bottom <= footer_top
         assert app.canvas.winfo_height() >= 20
+        assert app.gizmo.winfo_y() + app.gizmo.winfo_height() <= app.canvas.winfo_height()
         buttons = [app.quick_export_button, app.export_button, app.cancel_button, app.result_button]
         for left, right in zip(buttons, buttons[1:]):
             assert left.winfo_rootx() + left.winfo_width() <= right.winfo_rootx()
@@ -81,6 +83,8 @@ def test_gui_preview_export_and_close(tmp_path, panorama, ffmpeg):
 def gui_app():
     import tkinter as tk
     from pano360.gui import App
+    # Retire previous Tk interpreters on the UI thread before starting another window.
+    gc.collect()
     try:
         app = App()
     except tk.TclError as exc:
@@ -263,3 +267,78 @@ def test_switch_photo_discards_inflight_frame(gui_app, tmp_path, panorama, monke
         assert app.preview_image.getpixel((0, 0))[2] > 240
     finally:
         release.set()
+
+
+def test_gizmo_axes_presets_export_and_removed_fields(gui_app, panorama, tmp_path, ffmpeg):
+    import numpy as np
+    from pano360.core import load_preset, save_preset
+    from pano360.gizmo import AXES, axis_rotation
+    from pano360.preview import rotation
+    app = gui_app
+    app.geometry("1000x720")
+    app.deiconify()
+    app.update()
+    app.withdraw()
+    app.add_paths([panorama[0]])
+    app.apply_settings(Settings(width=96, height=64, views=6))
+    app.face.set("Справа")
+    expected = rotation(90, 0, 0).astype(float)
+    for axis in "XYZ":
+        app.gizmo.mode = axis
+        app.gizmo.step(17)
+        expected = axis_rotation(AXES[axis], 17) @ expected
+        s = app.settings()
+        np.testing.assert_allclose(rotation(s.yaw, s.pitch, s.roll) @ rotation(90, 0, 0), expected, atol=1e-6)
+    preset = tmp_path / "orientation.json"
+    save_preset(preset, app.settings())
+    app.reset()
+    app.apply_settings(load_preset(preset))
+    np.testing.assert_allclose(app.gizmo.matrix, expected, atol=1e-6)
+    app.pin_settings()
+    app.ffmpeg.set(ffmpeg)
+    app.output.set(str(tmp_path / "gizmo-export"))
+    app.start_export()
+    wait_ui(app, lambda: app.last_report is not None)
+    assert not app.last_report["errors"] and len(app.last_report["files"]) == 6
+    for item in app.last_report["files"]:
+        assert item["settings"] == asdict(load_preset(preset))
+    def entries(widget):
+        for child in widget.winfo_children():
+            if child.winfo_class() == "TEntry":
+                yield str(child.cget("textvariable"))
+            yield from entries(child)
+    visible_variables = set(entries(app))
+    assert str(app.vars["fov"]) in visible_variables
+    assert not {str(app.vars[key]) for key in ("yaw", "pitch", "roll")} & visible_variables
+
+
+def test_gizmo_mouse_keyboard_refinement_and_sync(gui_app, panorama):
+    import numpy as np
+    app = gui_app
+    app.deiconify()
+    app.update()
+    app.withdraw()
+    app.add_paths([panorama[0]])
+    wait_ui(app, lambda: app.preview_image is not None)
+    gizmo = app.gizmo
+    cx, cy, radius = gizmo.geometry_values()
+    # Central free trackball gesture, then release: normal preview resolution returns.
+    gizmo.press(SimpleNamespace(x=cx+8, y=cy+5))
+    gizmo.move(SimpleNamespace(x=cx+15, y=cy+12, state=0))
+    assert app.dragging
+    gizmo.release(SimpleNamespace(x=cx+18, y=cy+15, state=0))
+    assert not app.dragging
+    wait_ui(app, lambda: not app.preview_busy and not app.preview_dirty and app.timer is None)
+    assert app.preview_image.size == (613, 460)
+    assert app.settings() != Settings()
+    # Reset only the orientation with Home; focus navigation is not swallowed.
+    app.vars["fov"].set("100")
+    gizmo.key(SimpleNamespace(keysym="Home", state=0))
+    np.testing.assert_allclose(gizmo.matrix, np.eye(3), atol=1e-7)
+    assert app.settings().fov == 100
+    assert gizmo.key(SimpleNamespace(keysym="Tab", state=0)) is None
+    gizmo.key(SimpleNamespace(keysym="x", state=0))
+    gizmo.key(SimpleNamespace(keysym="Right", state=1))
+    assert app.settings().pitch == pytest.approx(.25, abs=1e-5)
+    gizmo.wheel(SimpleNamespace(delta=-120, state=1))
+    assert app.settings().pitch == pytest.approx(0, abs=1e-5)
