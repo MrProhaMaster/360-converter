@@ -1,5 +1,9 @@
 import time
 import gc
+import json
+import os
+import subprocess
+import sys
 import threading
 from types import SimpleNamespace
 from dataclasses import asdict
@@ -16,6 +20,27 @@ def test_cli(tmp_path, panorama, ffmpeg, capsys):
                  "--width", "64", "--height", "64"]) == 0
     assert '"errors": []' in capsys.readouterr().out
     assert main([str(source), "--output", str(tmp_path / "cli"), "--ffmpeg", ffmpeg, "--views", "5"]) == 2
+
+
+def test_cli_unicode_report_on_western_windows_codepage(tmp_path, panorama, ffmpeg):
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "cp1252"
+    result = subprocess.run([sys.executable, "-m", "pano360.cli", str(panorama[0]),
+                             "--output", str(tmp_path / "кадры"), "--ffmpeg", ffmpeg,
+                             "--width", "64", "--height", "64"],
+                            env=env, capture_output=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout.decode("utf-8"))
+    assert report["files"][0]["source"] == panorama[0].name
+    assert not report["errors"]
+
+
+def test_cli_without_console(tmp_path, panorama, ffmpeg, monkeypatch):
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+    assert main([str(panorama[0]), "--output", str(tmp_path / "silent"), "--ffmpeg", ffmpeg,
+                 "--width", "64", "--height", "64"]) == 0
+    assert len(list((tmp_path / "silent").glob("*/report.json"))) == 1
 
 
 def wait_ui(app, predicate, timeout=15):

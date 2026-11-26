@@ -8,6 +8,11 @@ from .core import Settings, batch_export, find_ffmpeg, check_ffmpeg, load_preset
 
 
 def main(argv=None):
+    # A redirected Windows GUI EXE can still have cp1252 stdout/stderr.
+    # Reports contain Unicode filenames, so use UTF-8 regardless of system locale.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
     p = argparse.ArgumentParser(description="Офлайн-конвертер эквиректангулярных JPEG 360°")
     p.add_argument("input", type=Path)
     p.add_argument("--output", type=Path, required=True)
