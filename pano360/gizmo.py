@@ -78,7 +78,6 @@ class RotationGizmo(tk.Canvas):
     def redraw(self):
         self.delete("all")
         cx, cy, radius = self.geometry_values()
-        self.rings = {}
         self.buttons = {}
         self.create_oval(cx-radius, cy-radius, cx+radius, cy+radius, fill="#1d2b43", outline="#51637d")
         # Split circles into depth-sorted segments, with muted rear halves.
@@ -90,7 +89,6 @@ class RotationGizmo(tk.Canvas):
             angles = np.linspace(0, 2 * np.pi, 73)
             points = (self.matrix.T @ (u[:, None] * np.cos(angles) + v[:, None] * np.sin(angles))).T
             screen = [(cx + radius * p[0], cy + radius * p[1]) for p in points]
-            self.rings[name] = screen
             for i in range(len(points)-1):
                 depth = (points[i, 2] + points[i+1, 2]) / 2
                 segments.append((depth, name, screen[i], screen[i+1]))
@@ -112,22 +110,6 @@ class RotationGizmo(tk.Canvas):
             self.create_text((bounds[0]+bounds[2])/2, (bounds[1]+bounds[3])/2, text=name,
                              fill=COLORS.get(name, "#dce7f7"), font=("Segoe UI", 9, "bold"))
 
-    def ring_at(self, x, y):
-        cx, cy, radius = self.geometry_values()
-        if math.hypot(x-cx, y-cy) < radius * 0.45:
-            return None
-        closest, distance = None, 6.
-        point = np.array([x, y])
-        for name, points in self.rings.items():
-            for a, b in zip(points, points[1:]):
-                a, b = np.array(a), np.array(b)
-                edge = b-a
-                t = np.clip(np.dot(point-a, edge) / max(1e-10, np.dot(edge, edge)), 0, 1)
-                d = np.linalg.norm(point - (a + t * edge))
-                if d < distance:
-                    closest, distance = name, d
-        return closest
-
     def press(self, event):
         self.focus_set()
         for name, (x0, y0, x1, y1) in self.buttons.items():
@@ -138,11 +120,9 @@ class RotationGizmo(tk.Canvas):
         cx, cy, radius = self.geometry_values()
         if math.hypot(event.x-cx, event.y-cy) > radius + 10:
             return
-        ring = self.ring_at(event.x, event.y) if self.mode == "Своб." else None
-        axis = ring or (self.mode if self.mode in AXES else None)
-        if ring:
-            self.mode = ring
-            self.redraw()
+        # Rings and moving axis labels are visual guides, not mode switches.
+        # Axis locking must be an explicit button/keyboard action.
+        axis = self.mode if self.mode in AXES else None
         self.gesture = (event.x, event.y, self.matrix.copy(), axis)
 
     def move(self, event):

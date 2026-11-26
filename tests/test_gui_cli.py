@@ -65,9 +65,9 @@ def test_gui_preview_export_and_close(tmp_path, panorama, ffmpeg):
         app.geometry("1000x720")
         app.deiconify()
         app.update()
-        export_bottom = app.export_frame.winfo_rooty() + app.export_frame.winfo_height()
+        controls_bottom = app.presetbar.winfo_rooty() + app.presetbar.winfo_height()
         footer_top = app.progressbar.master.winfo_rooty()
-        assert export_bottom <= footer_top
+        assert controls_bottom <= footer_top
         assert app.canvas.winfo_height() >= 20
         assert app.gizmo.winfo_y() + app.gizmo.winfo_height() <= app.canvas.winfo_height()
         buttons = [app.quick_export_button, app.export_button, app.cancel_button, app.result_button]
@@ -333,8 +333,8 @@ def test_gizmo_axes_presets_export_and_removed_fields(gui_app, panorama, tmp_pat
                 yield str(child.cget("textvariable"))
             yield from entries(child)
     visible_variables = set(entries(app))
-    assert str(app.vars["fov"]) in visible_variables
-    assert not {str(app.vars[key]) for key in ("yaw", "pitch", "roll")} & visible_variables
+    assert visible_variables == {str(app.output)}
+    assert not hasattr(app, "export_frame")
 
 
 def test_gizmo_mouse_keyboard_refinement_and_sync(gui_app, panorama):
@@ -367,3 +367,51 @@ def test_gizmo_mouse_keyboard_refinement_and_sync(gui_app, panorama):
     assert app.settings().pitch == pytest.approx(.25, abs=1e-5)
     gizmo.wheel(SimpleNamespace(delta=-120, state=1))
     assert app.settings().pitch == pytest.approx(0, abs=1e-5)
+
+
+@pytest.mark.parametrize("point", [(1, 0), (0, -1), (.8, .6)])
+def test_sphere_rings_and_labels_do_not_select_axes(gui_app, point):
+    """Starting on a colored ring or axis label must stay a free trackball drag."""
+    import numpy as np
+    app = gui_app
+    app.deiconify()
+    app.update()
+    gizmo = app.gizmo
+    cx, cy, radius = gizmo.geometry_values()
+    start = SimpleNamespace(x=cx+radius*point[0], y=cy+radius*point[1], state=0)
+    initial = gizmo.matrix.copy()
+    gizmo.press(start)
+    assert gizmo.mode == "Своб."
+    assert gizmo.gesture[3] is None
+    gizmo.move(SimpleNamespace(x=cx+8, y=cy+5, state=0))
+    assert not np.allclose(gizmo.matrix, initial)
+    # Passing over the mode buttons during the same gesture must not select one.
+    x0, y0, x1, y1 = gizmo.buttons["X"]
+    gizmo.release(SimpleNamespace(x=(x0+x1)/2, y=(y0+y1)/2, state=0))
+    assert gizmo.mode == "Своб."
+    assert gizmo.gesture is None
+
+
+@pytest.mark.parametrize("axis", list("XYZ"))
+def test_axis_lock_requires_explicit_button_and_can_be_released(gui_app, axis):
+    import numpy as np
+    from pano360.gizmo import AXES, axis_rotation
+    app = gui_app
+    app.deiconify()
+    app.update()
+    gizmo = app.gizmo
+    initial = gizmo.matrix.copy()
+    x0, y0, x1, y1 = gizmo.buttons[axis]
+    gizmo.press(SimpleNamespace(x=(x0+x1)/2, y=(y0+y1)/2))
+    assert gizmo.mode == axis and gizmo.gesture is None
+    np.testing.assert_allclose(gizmo.matrix, initial)
+    cx, cy, _ = gizmo.geometry_values()
+    gizmo.press(SimpleNamespace(x=cx+8, y=cy+5))
+    assert gizmo.gesture[3] == axis
+    gizmo.release(SimpleNamespace(x=cx+20, y=cy-2, state=0))
+    np.testing.assert_allclose(gizmo.matrix, axis_rotation(AXES[axis], 9.5) @ initial, atol=1e-6)
+    x0, y0, x1, y1 = gizmo.buttons["Своб."]
+    gizmo.press(SimpleNamespace(x=(x0+x1)/2, y=(y0+y1)/2))
+    gizmo.press(SimpleNamespace(x=cx+8, y=cy+5))
+    assert gizmo.mode == "Своб." and gizmo.gesture[3] is None
+    gizmo.release(SimpleNamespace(x=cx+12, y=cy+10, state=0))

@@ -13,7 +13,7 @@ from PIL import Image, ImageTk
 
 from . import __version__
 from .core import (Settings, ConversionError, Cancelled, batch_export, check_ffmpeg,
-                   find_ffmpeg, bundled_ffmpeg, load_preset, save_preset)
+                   find_ffmpeg, load_preset, save_preset)
 from .preview import PreviewRenderer, rotation
 from .gizmo import RotationGizmo, to_angles
 
@@ -52,7 +52,6 @@ class App(tk.Tk):
         self.last_report = None
         self.vars = {key: tk.StringVar(value=str(value)) for key, value in asdict(Settings()).items()}
         self.ffmpeg = tk.StringVar()
-        self.builtin_ffmpeg = bundled_ffmpeg()
         self.output = tk.StringVar()
         self.status = tk.StringVar(value="Добавьте панорамы JPEG 2:1. Все фотографии остаются на компьютере.")
         self.meta = tk.StringVar(value="Нет выбранной панорамы")
@@ -138,53 +137,35 @@ class App(tk.Tk):
 
         controls = ttk.Frame(right)
         controls.grid(row=3, column=0, sticky="ew")
-        ttk.Label(controls, text="Угол обзора / FOV").pack(side="left", padx=(0, 8))
-        ttk.Entry(controls, textvariable=self.vars["fov"], width=7).pack(side="left")
-        ttk.Label(controls, text="Шар: свободно · X/Y/Z: ось · Shift: точнее", style="Muted.TLabel").pack(side="left", padx=12)
+        ttk.Label(controls, text="Своб.: вращение шара · Кнопки X/Y/Z: выбор оси · Shift: точнее", style="Muted.TLabel").pack(side="left")
         ttk.Button(controls, text="−", width=3, command=lambda: self.gizmo.step(-2)).pack(side="right")
         ttk.Button(controls, text="+", width=3, command=lambda: self.gizmo.step(2)).pack(side="right", padx=4)
         presetbar = ttk.Frame(right)
+        self.presetbar = presetbar
         presetbar.grid(row=4, column=0, sticky="ew", pady=8)
         for text, command in [("Сбросить", self.reset), ("Открыть пресет…", self.open_preset),
                               ("Сохранить пресет…", self.write_preset), ("Закрепить за фото", self.pin_settings)]:
             ttk.Button(presetbar, text=text, command=command).pack(side="left", padx=(0, 5))
 
-        export = ttk.LabelFrame(right, text="03  ЭКСПОРТ", padding=10)
-        self.export_frame = export
-        export.grid(row=5, column=0, sticky="ew")
-        for col, (key, label) in enumerate((("views", "Видов"), ("width", "Ширина"), ("height", "Высота"), ("quality", "Качество JPEG"))):
-            ttk.Label(export, text=label).grid(row=0, column=col, sticky="w", padx=5)
-            widget = ttk.Combobox(export, textvariable=self.vars[key], values=[1, 4, 6], state="readonly", width=9) if key == "views" else ttk.Entry(export, textvariable=self.vars[key], width=12)
-            widget.grid(row=1, column=col, sticky="ew", padx=5, pady=5)
-            export.columnconfigure(col, weight=1)
-        ttk.Label(export, text="6 видов: квадратные грани 90°; высота равна ширине.\n4 вида: шаг 90°; при FOV < 90° между кадрами будут пропуски.", style="Muted.TLabel").grid(row=2, column=0, columnspan=4, sticky="w", pady=(4, 0))
-
         footer = ttk.Frame(self, padding=(20, 0, 20, 14))
         footer.grid(row=2, column=0, sticky="ew")
         footer.columnconfigure(1, weight=1)
-        ttk.Label(footer, text="FFmpeg").grid(row=0, column=0, sticky="w", padx=(0, 10))
-        if self.builtin_ffmpeg:
-            ttk.Label(footer, text="Встроен · установка и настройка не нужны", style="Muted.TLabel").grid(
-                row=0, column=1, columnspan=2, sticky="w", pady=8)
-        else:
-            ttk.Entry(footer, textvariable=self.ffmpeg).grid(row=0, column=1, sticky="ew", pady=4)
-            ttk.Button(footer, text="Выбрать…", command=self.choose_ffmpeg).grid(row=0, column=2, padx=(8, 0))
-        ttk.Label(footer, text="Папка экспорта").grid(row=1, column=0, sticky="w", padx=(0, 10))
-        ttk.Entry(footer, textvariable=self.output).grid(row=1, column=1, sticky="ew", pady=4)
-        ttk.Button(footer, text="Выбрать…", command=self.choose_output).grid(row=1, column=2, padx=(8, 0))
+        ttk.Label(footer, text="Папка экспорта").grid(row=0, column=0, sticky="w", padx=(0, 10))
+        ttk.Entry(footer, textvariable=self.output).grid(row=0, column=1, sticky="ew", pady=4)
+        ttk.Button(footer, text="Выбрать…", command=self.choose_output).grid(row=0, column=2, padx=(8, 0))
         buttons = ttk.Frame(footer)
-        buttons.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(10, 8))
+        buttons.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(10, 8))
         self.quick_export_button = ttk.Button(buttons, text="Вырезать 4 направления", style="Accent.TButton", command=self.quick_export)
         self.quick_export_button.pack(side="left", padx=(0, 8))
-        self.export_button = ttk.Button(buttons, text="Экспорт по настройкам", command=self.start_export)
+        self.export_button = ttk.Button(buttons, text="Сохранить кадры", command=self.start_export)
         self.export_button.pack(side="left")
         self.cancel_button = ttk.Button(buttons, text="Отменить", state="disabled", command=lambda: self.export_cancel.set())
         self.cancel_button.pack(side="left", padx=8)
         self.result_button = ttk.Button(buttons, text="Открыть результат", state="disabled", command=self.open_result)
         self.result_button.pack(side="right")
         self.progressbar = ttk.Progressbar(footer, maximum=100)
-        self.progressbar.grid(row=3, column=0, columnspan=3, sticky="ew")
-        ttk.Label(footer, textvariable=self.status, wraplength=1120).grid(row=4, column=0, columnspan=3, sticky="w", pady=(8, 0))
+        self.progressbar.grid(row=2, column=0, columnspan=3, sticky="ew")
+        ttk.Label(footer, textvariable=self.status, wraplength=1120).grid(row=3, column=0, columnspan=3, sticky="w", pady=(8, 0))
 
     def settings(self):
         try:
@@ -279,11 +260,6 @@ class App(tk.Tk):
                 save_preset(Path(path), settings)
         except (ConversionError, OSError) as exc:
             messagebox.showerror("Пресет", str(exc))
-
-    def choose_ffmpeg(self):
-        path = filedialog.askopenfilename(filetypes=[("FFmpeg", "*.exe"), ("Все файлы", "*")])
-        if path:
-            self.ffmpeg.set(path)
 
     def choose_output(self):
         path = filedialog.askdirectory()

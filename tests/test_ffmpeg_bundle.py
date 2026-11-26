@@ -67,7 +67,6 @@ def test_gui_uses_bundled_ffmpeg_without_configuration(frozen_layout, ffmpeg, re
     shutil.copyfile(ffmpeg, binary)
     app = request.getfixturevalue("gui_app")
     assert Path(app.ffmpeg.get()) == binary
-    assert app.builtin_ffmpeg == str(binary)
     app.add_paths([panorama[0]])
     app.vars["width"].set("64")
     app.vars["height"].set("64")

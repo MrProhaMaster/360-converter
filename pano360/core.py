@@ -123,7 +123,7 @@ def find_ffmpeg(explicit: str = "") -> str:
         return found
     if getattr(sys, "frozen", False):
         raise ConversionError("FFmpeg не найден. Распакуйте всю папку Pano360 из архива, включая bin и _internal.")
-    raise ConversionError("FFmpeg не найден. Выберите ffmpeg.exe в настройках.")
+    raise ConversionError("FFmpeg не найден. Поместите ffmpeg.exe в папку bin рядом с приложением или добавьте его в PATH.")
 
 
 def run_process(args: list[str], cancel: threading.Event | None = None, timeout=180) -> bytes:
