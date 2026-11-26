@@ -10,17 +10,16 @@ import tempfile
 from PIL import Image, ImageCms, ImageDraw
 
 
-def check(bundle: Path):
-    executable = bundle / "Pano360.exe"
-    ffmpeg = bundle / "bin" / "ffmpeg.exe"
-    manifest = json.loads((bundle / "licenses" / "FFmpeg-provenance.json").read_text(encoding="utf-8"))
-    with ffmpeg.open("rb") as stream:
-        assert hashlib.file_digest(stream, "sha256").hexdigest() == manifest["sha256"]
+def isolated_environment():
     env = os.environ.copy()
     env["PATH"] = str(Path(os.environ["SystemRoot"]) / "System32")
     for key in list(env):
         if key.upper().startswith(("PYTHON", "IMAGEIO_", "PANO360_")) or key.upper() in ("TCL_LIBRARY", "TK_LIBRARY"):
             del env[key]
+    return env
+
+
+def check_export(command, env):
     with tempfile.TemporaryDirectory(prefix="pano360-portable-") as temp:
         work = Path(temp) / "проверка с пробелами"
         work.mkdir()
@@ -36,7 +35,7 @@ def check(bundle: Path):
         before = source.read_bytes()
         for views in (1, 4, 6):
             output = work / f"out-{views}"
-            result = subprocess.run([str(executable), "--cli", str(source), "--output", str(output),
+            result = subprocess.run([*command, str(source), "--output", str(output),
                                      "--views", str(views), "--width", "128", "--height", "96"],
                                     cwd=work, env=env, timeout=180, capture_output=True)
             assert result.returncode == 0, (result.returncode, result.stderr)
@@ -51,6 +50,15 @@ def check(bundle: Path):
                     assert frame.info["icc_profile"] == icc
                     assert len(frame.getexif()) == 0
         assert source.read_bytes() == before
+
+
+def check(bundle: Path):
+    executable = bundle / "Pano360.exe"
+    ffmpeg = bundle / "bin" / "ffmpeg.exe"
+    manifest = json.loads((bundle / "licenses" / "FFmpeg-provenance.json").read_text(encoding="utf-8"))
+    with ffmpeg.open("rb") as stream:
+        assert hashlib.file_digest(stream, "sha256").hexdigest() == manifest["sha256"]
+    check_export([str(executable), "--cli"], isolated_environment())
     print("Portable EXE passed: 1/4/6 JPEG views, ICC, no EXIF, unchanged source, system-only PATH.")
 
 

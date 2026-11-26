@@ -4,7 +4,7 @@ if ($env:OS -ne 'Windows_NT') { throw 'Windows build must run on Windows.' }
 Push-Location (Split-Path $PSScriptRoot -Parent)
 try {
     $WindowMode = if ($Console) { '--console' } else { '--windowed' }
-    & $Python -m PyInstaller --noconfirm --clean $WindowMode --onedir --name Pano360 --distpath $OutputDirectory --collect-submodules PIL --copy-metadata Pillow --copy-metadata numpy launch.py
+    & $Python -m PyInstaller --noconfirm --clean $WindowMode --onedir --name Pano360 --distpath $OutputDirectory --collect-submodules PIL --copy-metadata Pillow --copy-metadata numpy --exclude-module imageio_ffmpeg launch.py
     if ($LASTEXITCODE -ne 0) { throw 'PyInstaller failed.' }
     $BundleDirectory = Join-Path $OutputDirectory 'Pano360'
     & $Python scripts/bundle_ffmpeg.py $BundleDirectory

@@ -55,9 +55,50 @@ def test_source_install_keeps_external_ffmpeg(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "frozen", False, raising=False)
     monkeypatch.setattr(sys, "executable", str(tmp_path / "python.exe"))
     monkeypatch.setattr(core, "__file__", str(tmp_path / "pano360" / "core.py"))
+    monkeypatch.setattr(core, "installed_ffmpeg", lambda: None)
     monkeypatch.setattr(core.shutil, "which", lambda name: "external-ffmpeg")
     assert core.bundled_ffmpeg() is None
     assert core.find_ffmpeg() == "external-ffmpeg"
+
+
+def test_source_install_finds_packaged_ffmpeg_without_path(tmp_path, monkeypatch):
+    import imageio_ffmpeg
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "python.exe"))
+    monkeypatch.setattr(core, "__file__", str(tmp_path / "pano360" / "core.py"))
+    monkeypatch.setenv("PATH", "")
+    monkeypatch.delenv("IMAGEIO_FFMPEG_EXE", raising=False)
+    monkeypatch.chdir(tmp_path)
+    executable = Path(core.find_ffmpeg())
+    assert Path(imageio_ffmpeg.__file__).resolve().parent in executable.parents
+    assert "ffmpeg version" in core.check_ffmpeg(str(executable))
+
+
+def test_source_missing_dependency_has_install_instruction(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "python.exe"))
+    monkeypatch.setattr(core, "__file__", str(tmp_path / "pano360" / "core.py"))
+    monkeypatch.setitem(sys.modules, "imageio_ffmpeg", None)
+    monkeypatch.setenv("PATH", "")
+    assert core.installed_ffmpeg() is None
+    with pytest.raises(core.ConversionError, match="python -m pip install --upgrade"):
+        core.find_ffmpeg()
+
+
+def test_source_gui_exports_without_ffmpeg_configuration(tmp_path, monkeypatch, request, panorama):
+    import imageio_ffmpeg
+    monkeypatch.setenv("PATH", "")
+    monkeypatch.delenv("IMAGEIO_FFMPEG_EXE", raising=False)
+    app = request.getfixturevalue("gui_app")
+    assert Path(imageio_ffmpeg.__file__).resolve().parent in Path(app.ffmpeg.get()).parents
+    app.add_paths([panorama[0]])
+    app.vars["width"].set("64")
+    app.vars["height"].set("64")
+    app.output.set(str(tmp_path / "source-export"))
+    app.quick_export_button.invoke()
+    wait_ui(app, lambda: app.last_report is not None)
+    assert not app.last_report["errors"]
+    assert len(app.last_report["files"]) == 4
 
 
 def test_gui_uses_bundled_ffmpeg_without_configuration(frozen_layout, ffmpeg, request, panorama, tmp_path):

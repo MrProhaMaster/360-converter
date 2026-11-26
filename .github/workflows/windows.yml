@@ -6,6 +6,21 @@ on:
 permissions:
   contents: read
 jobs:
+  source-install:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13.3'
+      - name: Install regular application dependencies
+        shell: pwsh
+        run: |
+          python -m venv .runtime-venv
+          .runtime-venv/Scripts/python -m pip install .
+      - name: Export without external FFmpeg or developer dependencies
+        shell: pwsh
+        run: .runtime-venv/Scripts/python scripts/check_source_install.py
   windows:
     runs-on: windows-latest
     steps:

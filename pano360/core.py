@@ -102,6 +102,20 @@ def bundled_ffmpeg() -> str | None:
     return None
 
 
+def installed_ffmpeg() -> str | None:
+    """The normal Python install includes FFmpeg in the imageio-ffmpeg wheel."""
+    if getattr(sys, "frozen", False):
+        return None  # Frozen builds have their own verified bin/ffmpeg.exe.
+    try:
+        import imageio_ffmpeg
+        candidate = Path(imageio_ffmpeg.get_ffmpeg_exe())
+        if candidate.is_file():
+            return str(candidate.resolve())
+    except (ImportError, RuntimeError, OSError):
+        pass
+    return None
+
+
 def find_ffmpeg(explicit: str = "") -> str:
     if explicit:
         path = Path(explicit).expanduser()
@@ -118,12 +132,15 @@ def find_ffmpeg(explicit: str = "") -> str:
         for candidate in (root / "ffmpeg.exe", root / "bin" / "ffmpeg.exe"):
             if candidate.is_file():
                 return str(candidate)
+    installed = installed_ffmpeg()
+    if installed:
+        return installed
     found = shutil.which("ffmpeg")
     if found:
         return found
     if getattr(sys, "frozen", False):
         raise ConversionError("FFmpeg не найден. Распакуйте всю папку Pano360 из архива, включая bin и _internal.")
-    raise ConversionError("FFmpeg не найден. Поместите ffmpeg.exe в папку bin рядом с приложением или добавьте его в PATH.")
+    raise ConversionError("FFmpeg не найден в зависимостях приложения. В папке исходников выполните: python -m pip install --upgrade .")
 
 
 def run_process(args: list[str], cancel: threading.Event | None = None, timeout=180) -> bytes:
