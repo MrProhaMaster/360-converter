@@ -88,12 +88,29 @@ def inspect_source(path: Path) -> SourceInfo:
         raise ConversionError(f"Не удалось прочитать JPEG: {exc}") from exc
 
 
+def bundled_ffmpeg() -> str | None:
+    """Resolve the portable copy independently of cwd, PATH and Python installs."""
+    if not getattr(sys, "frozen", False):
+        return None
+    roots = [Path(sys.executable).resolve().parent]
+    if hasattr(sys, "_MEIPASS"):
+        roots.append(Path(sys._MEIPASS))
+    for root in roots:
+        candidate = root / "bin" / "ffmpeg.exe"
+        if candidate.is_file():
+            return str(candidate.resolve())
+    return None
+
+
 def find_ffmpeg(explicit: str = "") -> str:
     if explicit:
         path = Path(explicit).expanduser()
         if not path.is_file():
             raise ConversionError("Указанный FFmpeg не найден.")
         return str(path.resolve())
+    bundled = bundled_ffmpeg()
+    if bundled:
+        return bundled
     roots = [Path(sys.executable).parent, Path(__file__).resolve().parent.parent]
     if getattr(sys, "frozen", False):
         roots.insert(0, Path(getattr(sys, "_MEIPASS", roots[0])))
@@ -104,6 +121,8 @@ def find_ffmpeg(explicit: str = "") -> str:
     found = shutil.which("ffmpeg")
     if found:
         return found
+    if getattr(sys, "frozen", False):
+        raise ConversionError("FFmpeg не найден. Распакуйте всю папку Pano360 из архива, включая bin и _internal.")
     raise ConversionError("FFmpeg не найден. Выберите ffmpeg.exe в настройках.")
 
 

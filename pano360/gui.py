@@ -13,7 +13,7 @@ from PIL import Image, ImageTk
 
 from . import __version__
 from .core import (Settings, ConversionError, Cancelled, batch_export, check_ffmpeg,
-                   find_ffmpeg, load_preset, save_preset)
+                   find_ffmpeg, bundled_ffmpeg, load_preset, save_preset)
 from .preview import PreviewRenderer, rotation
 from .gizmo import RotationGizmo, to_angles
 
@@ -52,6 +52,7 @@ class App(tk.Tk):
         self.last_report = None
         self.vars = {key: tk.StringVar(value=str(value)) for key, value in asdict(Settings()).items()}
         self.ffmpeg = tk.StringVar()
+        self.builtin_ffmpeg = bundled_ffmpeg()
         self.output = tk.StringVar()
         self.status = tk.StringVar(value="Добавьте панорамы JPEG 2:1. Все фотографии остаются на компьютере.")
         self.meta = tk.StringVar(value="Нет выбранной панорамы")
@@ -162,8 +163,12 @@ class App(tk.Tk):
         footer.grid(row=2, column=0, sticky="ew")
         footer.columnconfigure(1, weight=1)
         ttk.Label(footer, text="FFmpeg").grid(row=0, column=0, sticky="w", padx=(0, 10))
-        ttk.Entry(footer, textvariable=self.ffmpeg).grid(row=0, column=1, sticky="ew", pady=4)
-        ttk.Button(footer, text="Выбрать…", command=self.choose_ffmpeg).grid(row=0, column=2, padx=(8, 0))
+        if self.builtin_ffmpeg:
+            ttk.Label(footer, text="Встроен · установка и настройка не нужны", style="Muted.TLabel").grid(
+                row=0, column=1, columnspan=2, sticky="w", pady=8)
+        else:
+            ttk.Entry(footer, textvariable=self.ffmpeg).grid(row=0, column=1, sticky="ew", pady=4)
+            ttk.Button(footer, text="Выбрать…", command=self.choose_ffmpeg).grid(row=0, column=2, padx=(8, 0))
         ttk.Label(footer, text="Папка экспорта").grid(row=1, column=0, sticky="w", padx=(0, 10))
         ttk.Entry(footer, textvariable=self.output).grid(row=1, column=1, sticky="ew", pady=4)
         ttk.Button(footer, text="Выбрать…", command=self.choose_output).grid(row=1, column=2, padx=(8, 0))
