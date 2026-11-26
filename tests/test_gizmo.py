@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from pano360.gizmo import AXES, axis_rotation, ball_vector, to_angles, trackball
-from pano360.preview import rotation
+from converter_360.gizmo import AXES, axis_rotation, ball_vector, to_angles, trackball
+from converter_360.preview import rotation
 
 
 @pytest.mark.parametrize("angles", [(0, 0, 0), (37, -28, 61), (179.9, 89.99, -170),

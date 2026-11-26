@@ -1,0 +1,19 @@
+# UTF-8 Windows executable metadata, consumed by PyInstaller.
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(1, 5, 2, 0), prodvers=(1, 5, 2, 0), mask=0x3f,
+    flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
+  kids=[
+    StringFileInfo([
+      StringTable('041904b0', [
+        StringStruct('FileDescription', '360-конвертер'),
+        StringStruct('FileVersion', '1.5.2'),
+        StringStruct('InternalName', '360-converter'),
+        StringStruct('OriginalFilename', '360-конвертер.exe'),
+        StringStruct('ProductName', '360-конвертер'),
+        StringStruct('ProductVersion', '1.5.2')
+      ])
+    ]),
+    VarFileInfo([VarStruct('Translation', [1049, 1200])])
+  ]
+)

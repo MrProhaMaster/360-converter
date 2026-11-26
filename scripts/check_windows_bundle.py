@@ -14,13 +14,13 @@ def isolated_environment():
     env = os.environ.copy()
     env["PATH"] = str(Path(os.environ["SystemRoot"]) / "System32")
     for key in list(env):
-        if key.upper().startswith(("PYTHON", "IMAGEIO_", "PANO360_")) or key.upper() in ("TCL_LIBRARY", "TK_LIBRARY"):
+        if key.upper().startswith(("PYTHON", "IMAGEIO_", "CONVERTER_360_")) or key.upper() in ("TCL_LIBRARY", "TK_LIBRARY"):
             del env[key]
     return env
 
 
 def check_export(command, env):
-    with tempfile.TemporaryDirectory(prefix="pano360-portable-") as temp:
+    with tempfile.TemporaryDirectory(prefix="360-converter-portable-") as temp:
         work = Path(temp) / "проверка с пробелами"
         work.mkdir()
         source = work / "панорама.jpg"
@@ -53,7 +53,7 @@ def check_export(command, env):
 
 
 def check(bundle: Path):
-    executable = bundle / "Pano360.exe"
+    executable = bundle / "360-конвертер.exe"
     ffmpeg = bundle / "bin" / "ffmpeg.exe"
     manifest = json.loads((bundle / "licenses" / "FFmpeg-provenance.json").read_text(encoding="utf-8"))
     with ffmpeg.open("rb") as stream:

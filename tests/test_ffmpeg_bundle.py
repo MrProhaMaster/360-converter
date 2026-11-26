@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from pano360 import core
+from converter_360 import core
 from test_gui_cli import gui_app, wait_ui
 
 
@@ -14,9 +14,9 @@ def frozen_layout(tmp_path, monkeypatch):
     internal = folder / "_internal"
     internal.mkdir(parents=True)
     monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(sys, "executable", str(folder / "Pano360.exe"))
+    monkeypatch.setattr(sys, "executable", str(folder / "360-конвертер.exe"))
     monkeypatch.setattr(sys, "_MEIPASS", str(internal), raising=False)
-    monkeypatch.setattr(core, "__file__", str(internal / "pano360" / "core.py"))
+    monkeypatch.setattr(core, "__file__", str(internal / "converter_360" / "core.py"))
     monkeypatch.setenv("PATH", "")
     return folder
 
@@ -54,7 +54,7 @@ def test_incomplete_bundle_has_recovery_message(frozen_layout):
 def test_source_install_keeps_external_ffmpeg(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "frozen", False, raising=False)
     monkeypatch.setattr(sys, "executable", str(tmp_path / "python.exe"))
-    monkeypatch.setattr(core, "__file__", str(tmp_path / "pano360" / "core.py"))
+    monkeypatch.setattr(core, "__file__", str(tmp_path / "converter_360" / "core.py"))
     monkeypatch.setattr(core, "installed_ffmpeg", lambda: None)
     monkeypatch.setattr(core.shutil, "which", lambda name: "external-ffmpeg")
     assert core.bundled_ffmpeg() is None
@@ -65,7 +65,7 @@ def test_source_install_finds_packaged_ffmpeg_without_path(tmp_path, monkeypatch
     import imageio_ffmpeg
     monkeypatch.setattr(sys, "frozen", False, raising=False)
     monkeypatch.setattr(sys, "executable", str(tmp_path / "python.exe"))
-    monkeypatch.setattr(core, "__file__", str(tmp_path / "pano360" / "core.py"))
+    monkeypatch.setattr(core, "__file__", str(tmp_path / "converter_360" / "core.py"))
     monkeypatch.setenv("PATH", "")
     monkeypatch.delenv("IMAGEIO_FFMPEG_EXE", raising=False)
     monkeypatch.chdir(tmp_path)
@@ -77,7 +77,7 @@ def test_source_install_finds_packaged_ffmpeg_without_path(tmp_path, monkeypatch
 def test_source_missing_dependency_has_install_instruction(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "frozen", False, raising=False)
     monkeypatch.setattr(sys, "executable", str(tmp_path / "python.exe"))
-    monkeypatch.setattr(core, "__file__", str(tmp_path / "pano360" / "core.py"))
+    monkeypatch.setattr(core, "__file__", str(tmp_path / "converter_360" / "core.py"))
     monkeypatch.setitem(sys.modules, "imageio_ffmpeg", None)
     monkeypatch.setenv("PATH", "")
     assert core.installed_ffmpeg() is None

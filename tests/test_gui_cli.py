@@ -10,8 +10,8 @@ from dataclasses import asdict
 from pathlib import Path
 import pytest
 from PIL import Image
-from pano360.cli import main
-from pano360.core import ConversionError, Settings
+from converter_360.cli import main
+from converter_360.core import ConversionError, Settings
 
 
 def test_cli(tmp_path, panorama, ffmpeg, capsys):
@@ -25,7 +25,7 @@ def test_cli(tmp_path, panorama, ffmpeg, capsys):
 def test_cli_unicode_report_on_western_windows_codepage(tmp_path, panorama, ffmpeg):
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "cp1252"
-    result = subprocess.run([sys.executable, "-m", "pano360.cli", str(panorama[0]),
+    result = subprocess.run([sys.executable, "-m", "converter_360.cli", str(panorama[0]),
                              "--output", str(tmp_path / "кадры"), "--ffmpeg", ffmpeg,
                              "--width", "64", "--height", "64"],
                             env=env, capture_output=True, timeout=30)
@@ -55,13 +55,14 @@ def wait_ui(app, predicate, timeout=15):
 
 def test_gui_preview_export_and_close(tmp_path, panorama, ffmpeg):
     import tkinter as tk
-    from pano360.gui import App
+    from converter_360.gui import App
     try:
         app = App()
     except tk.TclError as exc:
         pytest.skip(f"No Tk display: {exc}")
     app.withdraw()
     try:
+        assert app.title().startswith("360-конвертер ")
         app.geometry("1000x720")
         app.deiconify()
         app.update()
@@ -107,7 +108,7 @@ def test_gui_preview_export_and_close(tmp_path, panorama, ffmpeg):
 @pytest.fixture
 def gui_app():
     import tkinter as tk
-    from pano360.gui import App
+    from converter_360.gui import App
     # Retire previous Tk interpreters on the UI thread before starting another window.
     gc.collect()
     try:
@@ -132,7 +133,7 @@ def gui_app():
 
 def test_quick_export_five_panoramas(gui_app, tmp_path, panorama, ffmpeg, monkeypatch):
     """The actual button produces 20 JPEGs even with mixed pinned view counts."""
-    from pano360 import gui
+    from converter_360 import gui
     app = gui_app
     source_bytes = panorama[0].read_bytes()
     paths = [tmp_path / f"панорама {i}.jpg" for i in range(5)]
@@ -178,7 +179,7 @@ def test_quick_export_five_panoramas(gui_app, tmp_path, panorama, ffmpeg, monkey
 
 @pytest.mark.parametrize("cancel_stage", ["files", "folder"])
 def test_quick_export_dialog_cancel(gui_app, panorama, monkeypatch, cancel_stage):
-    from pano360 import gui
+    from converter_360 import gui
     app = gui_app
     if cancel_stage == "folder":
         app.add_paths([panorama[0]])
@@ -193,7 +194,7 @@ def test_quick_export_dialog_cancel(gui_app, panorama, monkeypatch, cancel_stage
 
 @pytest.mark.parametrize("finish", ["cancel", "error"])
 def test_quick_export_recovers_controls(gui_app, tmp_path, panorama, ffmpeg, monkeypatch, finish):
-    from pano360 import gui
+    from converter_360 import gui
     app = gui_app
     app.add_paths([panorama[0]])
     app.ffmpeg.set(ffmpeg)
@@ -296,9 +297,9 @@ def test_switch_photo_discards_inflight_frame(gui_app, tmp_path, panorama, monke
 
 def test_gizmo_axes_presets_export_and_removed_fields(gui_app, panorama, tmp_path, ffmpeg):
     import numpy as np
-    from pano360.core import load_preset, save_preset
-    from pano360.gizmo import AXES, axis_rotation
-    from pano360.preview import rotation
+    from converter_360.core import load_preset, save_preset
+    from converter_360.gizmo import AXES, axis_rotation
+    from converter_360.preview import rotation
     app = gui_app
     app.geometry("1000x720")
     app.deiconify()
@@ -395,7 +396,7 @@ def test_sphere_rings_and_labels_do_not_select_axes(gui_app, point):
 @pytest.mark.parametrize("axis", list("XYZ"))
 def test_axis_lock_requires_explicit_button_and_can_be_released(gui_app, axis):
     import numpy as np
-    from pano360.gizmo import AXES, axis_rotation
+    from converter_360.gizmo import AXES, axis_rotation
     app = gui_app
     app.deiconify()
     app.update()

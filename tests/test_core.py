@@ -8,7 +8,7 @@ import time
 from PIL import Image
 import pytest
 
-from pano360.core import (Settings, ConversionError, Cancelled, inspect_source, render,
+from converter_360.core import (Settings, ConversionError, Cancelled, inspect_source, render,
                           batch_export, save_jpeg, save_preset, load_preset, check_ffmpeg,
                           run_process, projection_filter)
 
@@ -62,7 +62,7 @@ def test_no_overwrite_and_metadata(tmp_path, panorama):
     with pytest.raises(ConversionError):
         save_jpeg(image, dest, 95, icc, [source])
     assert source.read_bytes() == original and dest.read_bytes() == before
-    assert not list(tmp_path.glob(".pano360-*"))
+    assert not list(tmp_path.glob(".360_converter-*"))
     with Image.open(dest) as im:
         assert im.info["icc_profile"] == icc
         assert len(im.getexif()) == 0
@@ -83,7 +83,7 @@ def test_cube_pixel_limit():
 
 
 def test_publish_race(tmp_path, monkeypatch):
-    from pano360 import core
+    from converter_360 import core
     original = core.publish_new
     def concurrent_writer(temp, destination):
         destination.write_bytes(b"another writer")
@@ -93,7 +93,7 @@ def test_publish_race(tmp_path, monkeypatch):
     with pytest.raises(OSError):
         save_jpeg(Image.new("RGB", (64, 64)), target, 95, None)
     assert target.read_bytes() == b"another writer"
-    assert not list(tmp_path.glob(".pano360-*"))
+    assert not list(tmp_path.glob(".360_converter-*"))
 
 
 def test_cancel_and_timeout():
@@ -131,7 +131,7 @@ def test_cube_direction_geometry(panorama, ffmpeg):
     source, _ = panorama
     options = Settings(width=65, height=65, views=6)
     centers = []
-    from pano360.core import view_plan
+    from converter_360.core import view_plan
     for _, yaw, pitch in view_plan(options):
         with render(source, options, ffmpeg, face_yaw=yaw, face_pitch=pitch) as im:
             centers.append(im.getpixel((32, 32)))

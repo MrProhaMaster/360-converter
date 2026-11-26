@@ -10,7 +10,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from pano360.core import check_ffmpeg, run_process
+from converter_360.core import check_ffmpeg, run_process
 
 PACKAGE_VERSION = "0.8.1"
 BINARY_NAME = "ffmpeg-win-x86_64-v9.0.2.exe"

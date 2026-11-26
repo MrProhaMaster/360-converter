@@ -23,7 +23,7 @@ BG, PANEL, TEXT, MUTED, ACCENT = "#0f172a", "#192134", "#f1f5f9", "#b8c4d7", "#7
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title(f"Pano360 {__version__} • Панорама в кадр")
+        self.title(f"360-конвертер {__version__} • Панорама в кадр")
         self.geometry("1240x850")
         self.minsize(1000, 720)
         self.configure(bg=BG)
@@ -90,7 +90,7 @@ class App(tk.Tk):
     def _layout(self):
         header = ttk.Frame(self, padding=(20, 16))
         header.grid(row=0, column=0, sticky="ew")
-        ttk.Label(header, text="Pano360", style="Title.TLabel").pack(side="left")
+        ttk.Label(header, text="360-конвертер", style="Title.TLabel").pack(side="left")
         ttk.Label(header, text="  /  Панорама в кадр", style="Muted.TLabel").pack(side="left", pady=8)
         ttk.Label(header, text="ЛОКАЛЬНО · БЕЗ ОБЛАКА", style="Muted.TLabel").pack(side="right")
 

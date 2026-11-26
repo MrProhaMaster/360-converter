@@ -15,21 +15,21 @@ def check():
 import json
 from pathlib import Path
 import imageio_ffmpeg
-import pano360
-from pano360.core import find_ffmpeg, check_ffmpeg
+import converter_360
+from converter_360.core import find_ffmpeg, check_ffmpeg
 binary = Path(find_ffmpeg())
 assert Path(imageio_ffmpeg.__file__).resolve().parent in binary.parents
-print(json.dumps({'app': pano360.__version__, 'python': __import__('sys').version.split()[0],
-                  'ffmpeg': check_ffmpeg(str(binary)), 'module': pano360.__file__}))
+print(json.dumps({'app': converter_360.__version__, 'python': __import__('sys').version.split()[0],
+                  'ffmpeg': check_ffmpeg(str(binary)), 'module': converter_360.__file__}))
 """
-    with tempfile.TemporaryDirectory(prefix="pano360-source-install-") as temp:
+    with tempfile.TemporaryDirectory(prefix="360-converter-source-install-") as temp:
         result = subprocess.run([sys.executable, "-c", probe], cwd=temp, env=env,
                                 capture_output=True, timeout=30)
         assert result.returncode == 0, result.stderr
         info = json.loads(result.stdout)
         assert "site-packages" in Path(info["module"]).parts, info
-    check_export([sys.executable, "-m", "pano360.cli"], env)
-    print(f"Normal pip install passed: Python {info['python']}, Pano360 {info['app']}; "
+    check_export([sys.executable, "-m", "converter_360.cli"], env)
+    print(f"Normal pip install passed: Python {info['python']}, 360-converter {info['app']}; "
           "packaged FFmpeg, 1/4/6 JPEG views, ICC, unchanged source, system-only PATH.")
 
 

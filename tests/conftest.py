@@ -25,11 +25,11 @@ def panorama(tmp_path):
 
 @pytest.fixture
 def ffmpeg():
-    exe = os.environ.get("PANO360_TEST_FFMPEG") or shutil.which("ffmpeg")
+    exe = os.environ.get("CONVERTER_360_TEST_FFMPEG") or shutil.which("ffmpeg")
     if not exe:
         try:
             import imageio_ffmpeg
             exe = imageio_ffmpeg.get_ffmpeg_exe()
         except ImportError:
-            pytest.skip("Install .[dev] or set PANO360_TEST_FFMPEG")
+            pytest.skip("Install .[dev] or set CONVERTER_360_TEST_FFMPEG")
     return exe

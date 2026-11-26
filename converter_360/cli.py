@@ -13,7 +13,7 @@ def main(argv=None):
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="backslashreplace")
-    p = argparse.ArgumentParser(description="Офлайн-конвертер эквиректангулярных JPEG 360°")
+    p = argparse.ArgumentParser(prog="360-converter-cli", description="360-конвертер — офлайн-конвертер эквиректангулярных JPEG 360°")
     p.add_argument("input", type=Path)
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--ffmpeg", default="")

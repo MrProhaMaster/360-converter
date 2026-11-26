@@ -1,4 +1,4 @@
-name: Windows checks and portable build
+name: 360-конвертер — Windows checks and portable build
 on:
   push:
   pull_request:
@@ -39,6 +39,6 @@ jobs:
         run: ./scripts/build_windows.ps1 -Console -OutputDirectory diagnostic
       - uses: actions/upload-artifact@v4
         with:
-          name: Pano360-Windows-x64
-          path: dist/Pano360/
+          name: 360-converter-Windows-x64
+          path: dist/360-конвертер/
           retention-days: 14

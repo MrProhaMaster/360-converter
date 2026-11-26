@@ -139,7 +139,7 @@ def find_ffmpeg(explicit: str = "") -> str:
     if found:
         return found
     if getattr(sys, "frozen", False):
-        raise ConversionError("FFmpeg не найден. Распакуйте всю папку Pano360 из архива, включая bin и _internal.")
+        raise ConversionError("FFmpeg не найден. Распакуйте всю папку 360-конвертер из архива, включая bin и _internal.")
     raise ConversionError("FFmpeg не найден в зависимостях приложения. В папке исходников выполните: python -m pip install --upgrade .")
 
 
@@ -236,7 +236,7 @@ def save_jpeg(image: Image.Image, destination: Path, quality: int, icc: bytes | 
             raise ConversionError("Экспорт поверх исходной панорамы запрещён.")
     if destination.exists():
         raise ConversionError("Выходной файл уже существует.")
-    fd, name = tempfile.mkstemp(prefix=".pano360-", suffix=".tmp", dir=destination.parent)
+    fd, name = tempfile.mkstemp(prefix=".360_converter-", suffix=".tmp", dir=destination.parent)
     temporary = Path(name)
     try:
         with os.fdopen(fd, "wb") as stream:
@@ -283,7 +283,7 @@ def batch_export(sources: list[Path], output: Path, settings: Settings, ffmpeg: 
     chosen = [((per_file or {}).get(p, settings)).validate() for p in sources]
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
-    folder = Path(tempfile.mkdtemp(prefix=datetime.now().strftime("pano360-%Y%m%d-%H%M%S-"), dir=output))
+    folder = Path(tempfile.mkdtemp(prefix=datetime.now().strftime("360-конвертер-%Y%m%d-%H%M%S-"), dir=output))
     report = {"schema_version": 1, "folder": str(folder), "files": [], "errors": [], "cancelled": False}
     total = sum(s.views for s in chosen)
     done = 0

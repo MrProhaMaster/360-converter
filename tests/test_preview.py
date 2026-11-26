@@ -4,8 +4,8 @@ import numpy as np
 from PIL import Image
 import pytest
 
-from pano360.core import Cancelled, Settings, render
-from pano360.preview import PreviewRenderer, project
+from converter_360.core import Cancelled, Settings, render
+from converter_360.preview import PreviewRenderer, project
 
 
 @pytest.fixture
@@ -47,7 +47,7 @@ def test_preview_seam_continuity(direction_panorama):
 
 
 def test_preview_cache_and_cancel(panorama, monkeypatch):
-    from pano360 import preview
+    from converter_360 import preview
     inspect = preview.inspect_source
     calls = []
 
